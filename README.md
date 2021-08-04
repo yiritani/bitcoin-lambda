@@ -1,4 +1,4 @@
-# aws-udemy-bitcoin
+# aws-bitcoin
 
 This is a sample template for aws-udemy-bitcoin - Below is a brief explanation of what we have generated for you:
 
