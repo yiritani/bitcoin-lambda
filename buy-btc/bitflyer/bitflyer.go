@@ -13,6 +13,8 @@ import (
 
 const baseURL = "https://api.bitflyer.com"
 const productCodeKey = "product_code"
+const btcMinimumAmount = 0.001 //bitflyerの最小注文数量
+const btcPlace = 4.0           //少数第4位
 
 type APIClient struct {
 	apiKey    string
@@ -76,6 +78,50 @@ func GetTicker(ch chan *Ticker, errCh chan error, code ProductCode) {
 	ch <- &ticker
 	errCh <- nil
 
+}
+
+func PlaceOrderWithParams(client *APIClient, price, size float64) (*OrderRes, error) {
+	order := Order{
+		ProductCode:    Btcjpy.String(),
+		ChildOrderType: Limit.String(),
+		Side:           Buy.String(),
+		Price:          price,
+		Size:           size,
+		MinuteToExpire: 4320,
+		TimeInForce:    Gtc.String(),
+	}
+
+	orderRes, err := client.PlaceOrder(&order)
+	if err != nil {
+		return nil, err
+	}
+
+	return orderRes, nil
+}
+
+func GetBuyLogic(strategy int) func(float64, *Ticker) (float64, float64) {
+	var logic func(float64, *Ticker) (float64, float64)
+
+	switch strategy {
+	case 1:
+		logic = func(budget float64, t *Ticker) (float64, float64) {
+			var buyPrice, buySize float64
+			buyPrice = utils.RoundDecimal(t.Ltp * 0.985)
+			buySize = utils.CalcAmount(buyPrice, budget, btcMinimumAmount, btcPlace)
+			return buyPrice, buySize
+		}
+		break
+	default:
+		logic = func(budget float64, t *Ticker) (float64, float64) {
+			var buyPrice, buySize float64
+			buyPrice = utils.RoundDecimal(t.BestAsk)
+			buySize = utils.CalcAmount(buyPrice, budget, btcMinimumAmount, btcPlace)
+			return buyPrice, buySize
+		}
+		break
+	}
+
+	return logic
 }
 
 func (client *APIClient) PlaceOrder(order *Order) (*OrderRes, error) {
