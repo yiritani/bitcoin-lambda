@@ -14,6 +14,15 @@ import (
 const baseURL = "https://api.bitflyer.com"
 const productCodeKey = "product_code"
 
+type APIClient struct {
+	apiKey    string
+	apiSecret string
+}
+
+func NewAPIClient(apiKey, apiSecret string) *APIClient {
+	return &APIClient{apiKey, apiSecret}
+}
+
 type Ticker struct {
 	ProductCode     string  `json:"product_code"`
 	State           string  `json:"state"`
@@ -46,24 +55,30 @@ type OrderRes struct {
 	ChildOrderAcceptanceId string `json:"child_order_acceptance_id"`
 }
 
-func GetTicker(code ProductCode) (*Ticker, error) {
+func GetTicker(ch chan *Ticker, errCh chan error, code ProductCode) {
 	url := baseURL + "/v1/ticker"
 	res, err := utils.DoHttpRequest("GET", url, nil,
 		map[string]string{productCodeKey: code.String()}, nil)
 	if err != nil {
-		return nil, err
+		errCh <- err
+		ch <- nil
+		return
 	}
 
 	var ticker Ticker
 	err = json.Unmarshal(res, &ticker)
 	if err != nil {
-		return nil, err
+		errCh <- err
+		ch <- nil
+		return
 	}
 
-	return &ticker, nil
+	ch <- &ticker
+	errCh <- nil
+
 }
 
-func PlaceOrder(order *Order, apiKey, apiSecret string) (*OrderRes, error) {
+func (client *APIClient) PlaceOrder(order *Order) (*OrderRes, error) {
 	method := "POST"
 	path := "/v1/me/sendchildorder"
 	url := baseURL + path
@@ -72,7 +87,7 @@ func PlaceOrder(order *Order, apiKey, apiSecret string) (*OrderRes, error) {
 		return nil, err
 	}
 
-	header := getHeader(method, path, apiKey, apiSecret, data)
+	header := client.getHeader(method, path, data)
 
 	res, err := utils.DoHttpRequest(method, url, header, map[string]string{}, data)
 	if err != nil {
@@ -92,18 +107,18 @@ func PlaceOrder(order *Order, apiKey, apiSecret string) (*OrderRes, error) {
 	return &orderRes, nil
 }
 
-func getHeader(method, path, apiKey, apiSecret string, body []byte) map[string]string {
+func (client *APIClient) getHeader(method, path string, body []byte) map[string]string {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	//ACCESS-SIGN は、ACCESS-TIMESTAMP, HTTP メソッド, リクエストのパス, リクエストボディを文字列として連結したものを、
 	//API secret で HMAC-SHA256 署名を行った結果です。
 	text := timestamp + method + path + string(body)
-	mac := hmac.New(sha256.New, []byte(apiSecret))
+	mac := hmac.New(sha256.New, []byte(client.apiSecret))
 	mac.Write([]byte(text))
 	sign := hex.EncodeToString(mac.Sum(nil))
 
 	return map[string]string{
-		"ACCESS-KEY":       apiKey,
+		"ACCESS-KEY":       client.apiKey,
 		"ACCESS-TIMESTAMP": timestamp,
 		"ACCESS-SIGN":      sign,
 		"Content-Type":     "application/json",

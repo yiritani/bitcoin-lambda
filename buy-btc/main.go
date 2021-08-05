@@ -3,31 +3,39 @@ package main
 import (
 	"buy-btc/bitflyer"
 	"fmt"
-	"github.com/aws/aws-lambda-go/lambda"
 	"math"
 
-	// "github.com/aws/aws-sdk-go"
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ssm"
 )
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	tickerChan := make(chan *bitflyer.Ticker)
+	errChan := make(chan error)
+	defer close(tickerChan)
+	defer close(errChan)
+
+	//ticker, err := bitflyer.GetTicker(bitflyer.Btcjpy)
+	go bitflyer.GetTicker(tickerChan, errChan, bitflyer.Btcjpy)
+	ticker := <-tickerChan
+	err := <-errChan
+
+	if err != nil {
+		return getErrorResponse(err.Error()), nil
+	}
 
 	apikey, err := getParameter("buy-btc-apikey")
 	if err != nil {
-		fmt.Println("33")
 		return getErrorResponse(err.Error()), err
 	}
 
-	secretkey, err := getParameter("buy-btc-apisecret")
+	apiSecret, err := getParameter("buy-btc-apisecret")
 	if err != nil {
-		fmt.Println("39")
 		return getErrorResponse(err.Error()), err
 	}
-
-	ticker, err := bitflyer.GetTicker(bitflyer.Btcjpy)
 
 	buyPrice := RoundDecimal(ticker.Ltp * 0.95)
 
@@ -41,9 +49,10 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		TimeInForce:    bitflyer.Gtc.String(),
 	}
 
-	orderRes, err := bitflyer.PlaceOrder(&order, apikey, secretkey)
+	client := bitflyer.NewAPIClient(apikey, apiSecret)
+
+	orderRes, err := client.PlaceOrder(&order)
 	if err != nil {
-		fmt.Println("45")
 		return getErrorResponse(err.Error()), err
 	}
 
