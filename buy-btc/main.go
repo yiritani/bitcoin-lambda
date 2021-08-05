@@ -1,42 +1,60 @@
 package main
 
 import (
-	//"buy-btc/bitflyer"
+	"buy-btc/bitflyer"
 	"fmt"
+	"github.com/aws/aws-lambda-go/lambda"
+	"math"
 
 	// "github.com/aws/aws-sdk-go"
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ssm"
-
 )
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	//ticker, err := bitflyer.GetTicker(bitflyer.Btcjpy)
 
 	apikey, err := getParameter("buy-btc-apikey")
 	if err != nil {
+		fmt.Println("33")
 		return getErrorResponse(err.Error()), err
 	}
 
-	//secretkey, err := getParameter("\tbuy-btc-apisecret")
-	//if err != nil {
-	//	return getErrorResponse(err.Error()), err
-	//}
-
+	secretkey, err := getParameter("buy-btc-apisecret")
 	if err != nil {
-		return events.APIGatewayProxyResponse{
-			Body:       "Bad Request!!",
-			StatusCode: 400,
-		}, nil
+		fmt.Println("39")
+		return getErrorResponse(err.Error()), err
+	}
+
+	ticker, err := bitflyer.GetTicker(bitflyer.Btcjpy)
+
+	buyPrice := RoundDecimal(ticker.Ltp * 0.95)
+
+	order := bitflyer.Order{
+		ProductCode:    bitflyer.Btcjpy.String(),
+		ChildOrderType: bitflyer.Limit.String(),
+		Side:           bitflyer.Buy.String(),
+		Price:          buyPrice,
+		Size:           0.001,
+		MinuteToExpire: 4320,
+		TimeInForce:    bitflyer.Gtc.String(),
+	}
+
+	orderRes, err := bitflyer.PlaceOrder(&order, apikey, secretkey)
+	if err != nil {
+		fmt.Println("45")
+		return getErrorResponse(err.Error()), err
 	}
 
 	return events.APIGatewayProxyResponse{
-		Body:       fmt.Sprintf("Apikey:%+v", apikey),
+		Body:       fmt.Sprintf("res:%+v", orderRes),
 		StatusCode: 200,
 	}, nil
+}
+
+func RoundDecimal(num float64) float64 {
+	return math.Round(num)
 }
 
 //Systems Managerからパラメータを取得する関数
