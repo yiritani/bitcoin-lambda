@@ -17,7 +17,6 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	defer close(tickerChan)
 	defer close(errChan)
 
-	//ticker, err := bitflyer.GetTicker(bitflyer.Btcjpy)
 	go bitflyer.GetTicker(tickerChan, errChan, bitflyer.Btcjpy)
 	ticker := <-tickerChan
 	err := <-errChan
