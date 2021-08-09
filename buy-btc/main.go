@@ -37,6 +37,13 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	client := bitflyer.NewAPIClient(apikey, apiSecret)
 
+	//全ての注文を削除する
+	cancelRes, err := bitflyer.CancelOrderWithParams(client)
+	fmt.Println("Cancel all orders", cancelRes)
+	if err != nil {
+		return getErrorResponse(err.Error()), err
+	}
+
 	//カリー化
 	price, size := bitflyer.GetBuyLogic(1)(5000.0, ticker)
 	orderRes, err := bitflyer.PlaceOrderWithParams(client, price, size)

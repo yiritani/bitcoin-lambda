@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 )
@@ -53,6 +54,10 @@ type Order struct {
 	TimeInForce    string  `json:"time_in_force"`
 }
 
+type OrderCancel struct {
+	ProductCode string `json:"product_code"`
+}
+
 type OrderRes struct {
 	ChildOrderAcceptanceId string `json:"child_order_acceptance_id"`
 }
@@ -80,6 +85,7 @@ func GetTicker(ch chan *Ticker, errCh chan error, code ProductCode) {
 
 }
 
+// ここから実際の注文関数を呼ぶ
 func PlaceOrderWithParams(client *APIClient, price, size float64) (*OrderRes, error) {
 	order := Order{
 		ProductCode:    Btcjpy.String(),
@@ -98,32 +104,6 @@ func PlaceOrderWithParams(client *APIClient, price, size float64) (*OrderRes, er
 
 	return orderRes, nil
 }
-
-func GetBuyLogic(strategy int) func(float64, *Ticker) (float64, float64) {
-	var logic func(float64, *Ticker) (float64, float64)
-
-	switch strategy {
-	case 1:
-		logic = func(budget float64, t *Ticker) (float64, float64) {
-			var buyPrice, buySize float64
-			buyPrice = utils.RoundDecimal(t.Ltp * 0.985)
-			buySize = utils.CalcAmount(buyPrice, budget, btcMinimumAmount, btcPlace)
-			return buyPrice, buySize
-		}
-		break
-	default:
-		logic = func(budget float64, t *Ticker) (float64, float64) {
-			var buyPrice, buySize float64
-			buyPrice = utils.RoundDecimal(t.BestAsk)
-			buySize = utils.CalcAmount(buyPrice, budget, btcMinimumAmount, btcPlace)
-			return buyPrice, buySize
-		}
-		break
-	}
-
-	return logic
-}
-
 func (client *APIClient) PlaceOrder(order *Order) (*OrderRes, error) {
 	method := "POST"
 	path := "/v1/me/sendchildorder"
@@ -151,6 +131,74 @@ func (client *APIClient) PlaceOrder(order *Order) (*OrderRes, error) {
 	}
 
 	return &orderRes, nil
+}
+
+func GetBuyLogic(strategy int) func(float64, *Ticker) (float64, float64) {
+	var logic func(float64, *Ticker) (float64, float64)
+
+	switch strategy {
+	case 1:
+		logic = func(budget float64, t *Ticker) (float64, float64) {
+			var buyPrice, buySize float64
+			buyPrice = utils.RoundDecimal(t.Ltp * 0.985)
+			buySize = 0.001 //utils.CalcAmount(buyPrice, budget, btcMinimumAmount, btcPlace)
+			return buyPrice, buySize
+		}
+		break
+	default:
+		logic = func(budget float64, t *Ticker) (float64, float64) {
+			var buyPrice, buySize float64
+			buyPrice = utils.RoundDecimal(t.BestAsk)
+			buySize = utils.CalcAmount(buyPrice, budget, btcMinimumAmount, btcPlace)
+			return buyPrice, buySize
+		}
+		break
+	}
+
+	return logic
+}
+
+func CancelOrderWithParams(client *APIClient) ([]byte, error) {
+	order := OrderCancel{
+		ProductCode: Btcjpy.String(),
+	}
+
+	orderRes, err := client.CancelOrder(&order)
+	if err != nil {
+		fmt.Println("168")
+		return nil, err
+	}
+
+	return orderRes, nil
+}
+func (client *APIClient) CancelOrder(orderCancel *OrderCancel) ([]byte, error) {
+	method := "POST"
+	path := "/v1/me/cancelallchildorders"
+	url := baseURL + path
+	data, err := json.Marshal(orderCancel)
+	if err != nil {
+		fmt.Println("179")
+		return nil, err
+	}
+
+	header := client.getHeader(method, path, data)
+
+	res, err := utils.DoHttpRequest(method, url, header, map[string]string{}, data)
+	if err != nil {
+		fmt.Println("186")
+
+		return nil, err
+	}
+
+	//var orderRes OrderRes
+	//err = json.Unmarshal(res, &orderRes)
+	//if err != nil {
+	//	fmt.Println("196")
+	//	return nil, err
+	//}
+
+	//fmt.Println(&orderRes)
+	return res, nil
 }
 
 func (client *APIClient) getHeader(method, path string, body []byte) map[string]string {
